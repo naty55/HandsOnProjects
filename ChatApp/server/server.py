@@ -18,7 +18,7 @@ DB = DataBase('test.db')
 persons = []
 Names = []
 number_of_conn = 0
-my_name = "Natty"
+
 
 
 SERVER = socket(AF_INET, SOCK_STREAM)  # start server
