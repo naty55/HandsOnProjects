@@ -68,9 +68,9 @@ class DataBase:
         INSERT INTO  
          users (name)
         VALUES
-         ('{name}');
+         (?);
         """
-        return self.execute_query(query, "[OK] user successfully recorded")
+        return self.execute_query(query, "[OK] user successfully recorded", (name,))
 
     def record_message(self, message, name):
         user_id = self.read_query(f"SELECT id from users WHERE name = '{name}'")
@@ -130,6 +130,8 @@ class DataBase:
 if __name__ == '__main__':
     d = DataBase("test.db")
     d.initialize()
+
+    d.record_user("M's")
 
     for user in d.get_users():
         print(user)

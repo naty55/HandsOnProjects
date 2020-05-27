@@ -20,7 +20,6 @@ Names = []
 number_of_conn = 0
 
 
-
 SERVER = socket(AF_INET, SOCK_STREAM)  # start server
 SERVER.bind(ADDR)
 
