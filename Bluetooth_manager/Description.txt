@@ -1,1 +1,2 @@
-In this project i'm going to try building a bluetooth manger for my old computer so i could connect with it to my bluetooth speaker
+In this project i'm going to try building a bluetooth manger for my old computer
+so i could connect with it to my bluetooth speaker
