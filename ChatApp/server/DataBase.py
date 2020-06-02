@@ -9,6 +9,8 @@ class DataBase:
         self.path = path
         self.connection = self.connect()
 
+        self.initialize()
+
     def connect(self):
         """
         Connect to SQLite database
@@ -24,6 +26,13 @@ class DataBase:
         return db
 
     def execute_query(self, query, success_msg='', params=None):
+        """
+        provide more convinient API for executing query on database
+        :param query: str query you want to execute
+        :param success_msg: str success message to be printed if execution went well
+        :param params: tuple
+        :return: 1 if success -1 otherwise
+        """
         cursor = self.connection.cursor()
         try:
             if params:
@@ -109,6 +118,30 @@ class DataBase:
         """
         return [item[0] for item in self.read_query(f"SELECT {key} from users")]
 
+    def delete_message(self, name, msg):
+        """
+        Delete message from messages table by user name and text
+        :param name: str user_name
+        :param msg: str text of message
+        :return: int 0 if success -1 otherwise
+        """
+        user_id = self.read_query(f"SELECT id from users WHERE name = '{name}'")
+        if user_id:
+            user_id = user_id[0][0]
+        else:
+            print("[EXCEPTION] No user with that name")
+        try:
+            return self.execute_query("DELETE from messages WHERE user_id=? and text=?", params=(user_id, msg))
+        except Error as e:
+            print("[EXCEPTION]", e)
+
+    def delete_user(self, name):
+        try:
+            self.execute_query(f"DELETE from users WHERE name=?", f"[OK] DELETED {name}", (name,))
+
+        except Error as e:
+            print("[EXCEPTION]", e)
+
     def get_messages(self):
         """
         return list of dict for all messages in database
@@ -129,9 +162,9 @@ class DataBase:
 
 if __name__ == '__main__':
     d = DataBase("test.db")
-    d.initialize()
 
-    d.record_user("M's")
+    d.record_message("HI", "Mosh")
+    d.delete_message("Mosh", "HI")
 
     for user in d.get_users():
         print(user)
