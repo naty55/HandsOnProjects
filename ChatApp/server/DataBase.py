@@ -78,6 +78,9 @@ class DataBase:
         self.execute_query(query_create_messages, "[OK] initialization of database successful")
         self.execute_query(query_create_users, "[OK] initialization of database successful")
 
+        for user in self.get_users():
+            print(user)
+
     def read_query(self, query):
         cursor = self.connection.cursor()
         try:

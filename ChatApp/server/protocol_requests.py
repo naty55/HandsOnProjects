@@ -1,26 +1,61 @@
 
-#CONSTANTS VARIABLES
-TYPES = ['{record}', '{delete}', '{talk}', ]
 
 
-def get_header(request):
-    header, body = request.split('\n\r', 2)
-    return header
-
-
-def get_params(header_request):
-    params = header_request.split()
-    return params[1:]
-
-
-def get_type(header):
+class MPFCSRequest:
     """
-    return type of request if type is not recognized return -1
-    :param header: str
-    :return: str if success int otherwise
+    Store request
     """
-    return header[0] if header[0] in TYPES else -1
+    # CONSTANTS VARIABLES
+    TYPES = ['{record}', '{delete}', '{talk}', ]
+
+    def __init__(self, request):
+        self.brequset = request  # Bytes string of request
+        self.request = request.decode('utf8')
+        self.header = self.get_header()
+        self.type = self.get_type()
+        self.text = self.get_body()
+
+    def get_header(self):
+        return self.request.split('\n\r', 2)[0]
+
+    def get_body(self):
+        return self.request.split('\r\n', 2)[1] if self.type == '{talk}' else ''
+
+    def get_params(self):
+        """
+        get parameters attached to header
+        :return: list of params
+        """
+        params = self.header.split()
+        if len(params) > 1:
+            return params[1:]
+        return []
+
+    def get_type(self):
+        """
+        return type of request if type is not recognized return -1
+        :param header: str
+        :return: str if success int otherwise
+        """
+        return self.header[0] if self.header[0] in self.TYPES else -1
 
 
+def response_record(params: list) -> bytes:
+    """
+    return
+    :param params: list of params
+    :return: bytes string
+    """
+    if params:
+        return bytes("{record} " + ' '.join(params) + "\n\r")
+
+    return bytes("{record}\n\r")
 
 
+def response_message(text: str) -> bytes:
+    """
+    return wrapped with the header
+    :param text: str
+    :return: bytes string
+    """
+    return bytes("{message}\n\r" + text)

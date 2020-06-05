@@ -2,10 +2,11 @@ from socket import AF_INET, socket, SOCK_STREAM
 from threading import Thread
 from datetime import datetime
 import time
+import traceback
 
 from person import Person
 from DataBase import DataBase
-import protocol_requests as MPFCP
+from protocol_requests import MPFCSRequest as req
 
 
 ###################################################
@@ -19,7 +20,7 @@ import protocol_requests as MPFCP
 #
 #    #### Request ####
 #
-#    There are some keywords for the header and every one of them
+#    There are some keywords or methods for the header and every one of them
 #    needs to be wrapped in curly brackets:
 #
 #    --> {quit}:   tells the server to close the connection with client.
@@ -40,12 +41,12 @@ import protocol_requests as MPFCP
 #
 #    For example let's say there is new user wants to join the chat room here
 #    is what he should do:
-#    A) send first message '''{record} user_name user's_email, password\n'''
+#    A) send first message '''{record} user_name user's_email, password\n\r'''
 #    B) after he has got message inform him that his recording was success now he can talk
-#       '''{talk}
+#       '''{talk}\n\r
 #          message
 #       '''
-#    C) when he is done with his talking and wants to leave '''{quit}\n'''
+#    C) when he is done with his talking and wants to leave '''{quit}\n\r'''
 #    and the connection will be closed.
 #
 #    #### Response ####
@@ -53,15 +54,20 @@ import protocol_requests as MPFCP
 #    Until now we have talked about the request now let's talk about the response.
 #    The response is just like the request the first line is the header and from
 #    there down is the body.
-#    Here are the keywords for the response:
+#    Here are the methods for response:
 #    --> {record}: tells the client that he should send record request in order to start
 #                  chatting. it may happened if the client didn't send record request or sent it with name or email
 #                  that is already in use for another client (even if that client is not connected at that time).
 #                  The header may contain the problematic part of the request if exists, like email is already in use
 #                  etc.
+#
 #    --> {message}: send the client new message that has arrived, the text message is in the body.
+#
 #    --> {success}: tells the client his request has succeeded. usually after delete request the server won't send
 #                   success response to every talk request (at least for now).
+#
+#    --> {update}:  tells the clients to update their messages entry. for example if user has deleted
+#                   message then update message will be sent to all clients.
 #
 #   That's it for now....
 
@@ -85,7 +91,7 @@ SERVER = socket(AF_INET, SOCK_STREAM)  # start server
 SERVER.bind(ADDR)
 
 
-def broadcast(msg, name=""):
+def broadcast(msg, method, name=""):
     """
     Neat the name and then
     Send the new message to all clients
@@ -136,26 +142,28 @@ def handle_client(person):
     client = person.client
 
     # Before the user starts chatting he has to be recorded
-    record_user(person)
+    if record_user(person) == -1:
+        return
+
     name = person.name
 
     time.sleep(0.1)
-    welcome_msg = bytes(name + " welcome to our chat send {quit} any time to leave", CODEC)
-    client.send(welcome_msg)  # Greet person that he is in the chat and inform him how he can leave
-
-    msg = bytes(f"{name} has joined the chat!", CODEC)
-    broadcast(msg)  # Inform all clients about the new member
+    client.send(bytes(name + " welcome to our chat", CODEC))  # Greet person that he is in the chat
+    broadcast(bytes(f"{name} has joined the chat!", CODEC))  # Inform all clients about the new member
 
     while True:  # wait for any message from person
         try:
-            msg = client.recv(BUFSIZ)
-            print(f"{name}: {msg.decode(CODEC)}")
-            if msg == bytes("{quit}", CODEC):  # if message is {quit} disconnect person
+            request = req(client.recv(BUFSIZ))  # Get message from client
+            if request.type == "{quit}":  # if message is {quit} disconnect person
                 handle_socket_closing(person)
                 break
 
-            else:  # otherwise send to all other clients
-                broadcast(msg, name)
+            elif request.type == '{talk}':  # if message is {talk} send to all other clients
+                print(f"{name}: {request.text}")
+                broadcast(request.text, name)
+
+            elif request.type == '{delete}':  # if message is {delete} delete message from db
+                pass
 
         except Exception as e:
             handle_socket_closing(person, e)
@@ -170,10 +178,12 @@ def handle_socket_closing(person, e=None):
     :param e: error message
     :return: None
     """
+
     global number_of_conn
-    number_of_conn -= 1
-    Names.remove(person.name)
-    print(number_of_conn, "people are connected")
+
+    if person.name:
+        Names.remove(person.name)
+
     client = person.client
     if e:  # Check if error message exists
         # error occurred log error message
@@ -182,12 +192,15 @@ def handle_socket_closing(person, e=None):
         client.send(bytes("{quit}", CODEC))
 
     client.close()
+    print(f"[DISCONNECTED] {person.addr} disconnected from the server at {datetime.now()}")
     persons.remove(person)
+
+    number_of_conn -= 1
+    print(number_of_conn, "people are connected")
+
     if not e:
         # Inform everybody that that person has left
         broadcast(bytes(f"{person.name} has left the chat...", CODEC))
-
-    print(f"[DISCONNECTED] {person.addr} disconnected from the server at {datetime.now()}")
 
 
 def get_info():
@@ -202,37 +215,33 @@ def get_info():
 
 
 def record_user(person):
+
+    global number_of_conn
     client = person.client
-    not_recorded = True
-    i = 0
-    while not_recorded:
-        i += 1
-        print("in not recorded ", i)
-        record_request = client.recv(BUFSIZ).decode(CODEC)
 
+    while True:
+        status = -1
         try:
-            header = MPFCP.get_header(record_request)
-            status = -1
+            record_request = req(client.recv(BUFSIZ))
 
-            if MPFCP.get_type(header) == '{record}':
-                name, email, password = MPFCP.get_params(header)
+            if record_request.type == '{record}':
+                name, email, password = record_request.get_params()
                 status = DB.record_user(name, email, password)
 
         except Exception as e:
-            print("[EXCEPTION]", e)
-            persons.remove(person)
-            client.close()
-            print(f"[DISCONNECTED] {person.addr} disconnected from server at {datetime.now()}")
-            return
+            print(traceback.format_exc())
+            handle_socket_closing(person, e)
+            return -1
 
         else:
             if status == 0:  # record succeeded
                 Names.append(name)
                 person.set_name(name)
-                not_recorded = False
+                break  # we got the user recorded now he is ready to talk
 
             else:  # There was not record request or there was a problem with recording the user
                 pass  # SEND RECORD RESPONSE
+
 
 
 if __name__ == '__main__':
