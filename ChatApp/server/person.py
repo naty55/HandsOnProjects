@@ -2,7 +2,7 @@ class Person:
     """
     represents a person, holds name, client socket and its IP address
     """
-    def __init__(self, addr,client):
+    def __init__(self, addr, client):
         self.addr = addr
         self.client = client
 

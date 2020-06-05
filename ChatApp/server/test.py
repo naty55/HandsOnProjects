@@ -22,12 +22,12 @@ def update_msg(client):
                 run = False
 
 
-c1 = Client("c1")
+c1 = Client("c21", 'emailc1@gmail.com', '12345678')
 a = Thread(target=update_msg, args=(c1,))
 a.start()
 
 sleep(2)
-c2 = Client("C2")
+c2 = Client("C2", 'emailc2@gmail.com', '123123123')
 b = Thread(target=update_msg, args=(c2,))
 b.start()
 

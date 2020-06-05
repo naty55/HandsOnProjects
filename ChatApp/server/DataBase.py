@@ -1,5 +1,6 @@
 import sqlite3
 from sqlite3 import Error
+import hashlib
 from datetime import datetime
 
 
@@ -8,6 +9,8 @@ class DataBase:
     def __init__(self, path):
         self.path = path
         self.connection = self.connect()
+
+        self.rows = ['id', 'name', 'email', 'password', 'hash']
 
         self.initialize()
 
@@ -66,22 +69,52 @@ class DataBase:
         query_create_users = """
                     CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT
+                    name TEXT,
+                    email TEXT,
+                    password TEXT,
+                    hash TEXT
                     );
                     """
         self.execute_query(query_create_messages, "[OK] initialization of database successful")
         self.execute_query(query_create_users, "[OK] initialization of database successful")
 
-    def record_user(self, name):
+    def read_query(self, query):
+        cursor = self.connection.cursor()
+        try:
+            cursor.execute(query)
+            result = cursor.fetchall()
+            #print("[OK] read query successful")
+            return result
+
+        except Error as e:
+            print("[EXCEPTION]", e)
+            return -1
+
+    def record_user(self, name, mail, password):
         query = f"""
         INSERT INTO  
-         users (name)
+         users (name, email, password, hash)
         VALUES
-         (?);
+         (?, ?, ?, ?);
         """
-        return self.execute_query(query, "[OK] user successfully recorded", (name,))
+        user_hash = hashlib.md5(bytes(name + mail + password, 'utf8')).hexdigest()
+        if self.is_user(name) or self.is_user(mail, key='email'):
+            usr = self.get_user(name)
+            if usr['hash'] == user_hash:
+                print(name, 'Just logged in')
+                return 0
+            else:
+                return -1
+        else:
+            return self.execute_query(query, "[OK] user successfully recorded", (name, mail, password, user_hash))
 
     def record_message(self, message, name):
+        """
+        record message from user
+        :param message: str
+        :param name: str
+        :return: 0 if success -1 otherwise
+        """
         user_id = self.read_query(f"SELECT id from users WHERE name = '{name}'")
         if user_id:
             user_id = user_id[0][0]
@@ -98,25 +131,28 @@ class DataBase:
 
         return self.execute_query(query, params=(user_id, message, datetime.now()))
 
-    def read_query(self, query):
-        cursor = self.connection.cursor()
-        try:
-            cursor.execute(query)
-            result = cursor.fetchall()
-            print("[OK] read query successful")
-            return result
-
-        except Error as e:
-            print("[EXCEPTION]", e)
-            return -1
-
     def get_users(self, key='name'):
         """
         return all users in database by key (default is name)
         :param key: str
         :return: list
         """
-        return [item[0] for item in self.read_query(f"SELECT {key} from users")]
+        response = self.read_query(f"SELECT {key} from users")
+        if key == '*':
+            return response
+        return [item[0] for item in response]
+
+    def get_user(self, value, key='name'):
+        """
+        get user by key-value pair
+        :param value: str
+        :param key: str
+        :return: dict with all info for the matched user
+        """
+
+        usr = self.read_query(f"SELECT * FROM users WHERE {key}='{value}'")[0]
+
+        return {self.rows[i]: usr[i] for i in range(len(self.rows))}
 
     def delete_message(self, name, msg):
         """
@@ -159,14 +195,20 @@ class DataBase:
                 """
         return [{'name': message[0], 'text': message[1], 'time':message[2]} for message in self.read_query(query)]
 
+    def is_user(self, value, key='name'):
+        if self.read_query(f"SELECT id from users WHERE {key} = '{value}'"):
+            return True
+        return False
+
 
 if __name__ == '__main__':
     d = DataBase("test.db")
 
-    d.record_message("HI", "Mosh")
-    d.delete_message("Mosh", "HI")
+    d.record_user('Bob', 'bob@gmail.com', '12345678')
 
-    for user in d.get_users():
+
+    print("++++++ USERS ++++++")
+    for user in d.get_users(key='*'):
         print(user)
 
     for message in d.get_messages():

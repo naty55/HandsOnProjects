@@ -15,12 +15,14 @@ class Client:
     ADDR = (HOST, PORT)
     CODEC = 'utf8'
 
-    def __init__(self, name):
+    def __init__(self, name, email, password):
         """
         Init object and send name to server
         :param name: str
         """
         self.name = name
+        self.email = email
+        self.password = password
 
         self.client_socket = socket(AF_INET, SOCK_STREAM)
         self.client_socket.connect(self.ADDR)
@@ -31,7 +33,13 @@ class Client:
 
         self.receive_thread = Thread(target=self.receive)
         self.receive_thread.start()
+
         self.send(self.name)
+        sleep(0.1)
+        self.send(self.email)
+        sleep(0.1)
+        self.send(self.password)
+
 
     def receive(self):
         """
