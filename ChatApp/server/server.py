@@ -7,6 +7,7 @@ import traceback
 from person import Person
 from DataBase import DataBase
 from protocol_requests import MPFCSRequest as req
+from protocol_requests import response_message, response_record
 
 
 ###################################################
@@ -28,6 +29,9 @@ from protocol_requests import MPFCSRequest as req
 #    --> {record}: tells the server of user (either new or not)
 #                  that wants to join th chat and it should be followed
 #                  with 3 params right after it separated by space name, email, password.
+#                  when user is recorded the server won't accept records messages anymore,
+#                  and if the client wants to connect as another user he'll have to
+#                  reconnect to server.
 #
 #    --> {talk}:   tells the server that the body contains message that
 #                  should be broadcast to every client on the chat and of course
@@ -91,22 +95,23 @@ SERVER = socket(AF_INET, SOCK_STREAM)  # start server
 SERVER.bind(ADDR)
 
 
-def broadcast(msg, method, name=""):
+def broadcast(msg, method='{talk}', name=""):
     """
     Neat the name and then
     Send the new message to all clients
-    :param msg: bytes["utf8"]
+    :param msg: str
     :param name: str
     :return: None
     """
     if name:
         name += " : "
+    message = response_message(name + msg)
     for person in persons:
         try:
-            client = person.client
-            client.send(bytes(name, CODEC) + msg)
+            person.client.send(message)
 
         except Exception as e:
+            print(traceback.format_exc())
             print(f"[EXCEPTION] could'nt send to {person.addr} at {datetime.now()}", e)
 
 
@@ -142,28 +147,31 @@ def handle_client(person):
     client = person.client
 
     # Before the user starts chatting he has to be recorded
-    if record_user(person) == -1:
+    if get_user(person) == -1:
         return
 
     name = person.name
 
     time.sleep(0.1)
-    client.send(bytes(name + " welcome to our chat", CODEC))  # Greet person that he is in the chat
-    broadcast(bytes(f"{name} has joined the chat!", CODEC))  # Inform all clients about the new member
+    client.send(response_message(name + " welcome to our chat"))  # Greet person that he is in the chat
+    broadcast(f"{name} has joined the chat!")  # Inform all clients about the new member
 
     while True:  # wait for any message from person
         try:
             request = req(client.recv(BUFSIZ))  # Get message from client
-            if request.type == "{quit}":  # if message is {quit} disconnect person
+            _type = request.type
+
+            if _type == "{quit}":  # if message is {quit} disconnect person
                 handle_socket_closing(person)
                 break
 
-            elif request.type == '{talk}':  # if message is {talk} send to all other clients
+            elif _type == '{talk}':  # if message is {talk} send to all other clients
                 print(f"{name}: {request.text}")
                 broadcast(request.text, name)
+                DB.record_message(request.text, name)
 
-            elif request.type == '{delete}':  # if message is {delete} delete message from db
-                pass
+            elif _type == '{delete}':  # if message is {delete} delete message from db
+                pass  # delete from message db and broadcast to all users update message
 
         except Exception as e:
             handle_socket_closing(person, e)
@@ -196,11 +204,11 @@ def handle_socket_closing(person, e=None):
     persons.remove(person)
 
     number_of_conn -= 1
-    print(number_of_conn, "people are connected")
+    print("[OK]", number_of_conn, "people are connected")
 
     if not e:
         # Inform everybody that that person has left
-        broadcast(bytes(f"{person.name} has left the chat...", CODEC))
+        broadcast(f"{person.name} has left the chat...")
 
 
 def get_info():
@@ -214,15 +222,25 @@ def get_info():
     return info
 
 
-def record_user(person):
+def get_user(person):
+    """
+    get from client his details like name, email and password
+    using record response, and record them into database
+    :param person: person that is not recorded
+    :return: int if failed(-1)
+    """
 
     global number_of_conn
-    client = person.client
+    status_dict = {-3: "name",  # name has taken
+                   -2: "email",  # email in use
+                   -1: "undetected",
+                   0: ""
+                   }
 
     while True:
         status = -1
         try:
-            record_request = req(client.recv(BUFSIZ))
+            record_request = req(person.client.recv(BUFSIZ))
 
             if record_request.type == '{record}':
                 name, email, password = record_request.get_params()
@@ -234,14 +252,16 @@ def record_user(person):
             return -1
 
         else:
+            print("status:", status)
             if status == 0:  # record succeeded
                 Names.append(name)
                 person.set_name(name)
                 break  # we got the user recorded now he is ready to talk
 
-            else:  # There was not record request or there was a problem with recording the user
-                pass  # SEND RECORD RESPONSE
-
+            elif status < -1:  # There was not record request or there was a problem with recording the user
+                person.client.send(response_record((status_dict[status],)))
+            else:
+                person.client.send(response_record(()))
 
 
 if __name__ == '__main__':

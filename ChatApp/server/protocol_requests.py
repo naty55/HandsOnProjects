@@ -1,16 +1,16 @@
+CODEC = 'utf8'
 
 
-
-class MPFCSRequest:
+class MPFCS:
     """
     Store request
     """
     # CONSTANTS VARIABLES
-    TYPES = ['{record}', '{delete}', '{talk}', ]
+    TYPES = []
 
     def __init__(self, request):
         self.brequset = request  # Bytes string of request
-        self.request = request.decode('utf8')
+        self.request = request.decode(CODEC)
         self.header = self.get_header()
         self.type = self.get_type()
         self.text = self.get_body()
@@ -34,28 +34,45 @@ class MPFCSRequest:
     def get_type(self):
         """
         return type of request if type is not recognized return -1
-        :param header: str
         :return: str if success int otherwise
         """
-        return self.header[0] if self.header[0] in self.TYPES else -1
+        header = self.header.split()
+        return header[0] if header[0] in self.TYPES else -1
 
 
-def response_record(params: list) -> bytes:
+class MPFCSRequest(MPFCS):
+    TYPES = ['{record}', '{delete}', '{talk}', '{quit}']
+
+    def __init__(self, request):
+        super().__init__(request)
+
+
+class MPFCSResponse(MPFCS):
+    TYPES = ['{record}', '{message}', '{success}', '{update}']
+
+    def __init__(self, request):
+        super().__init__(self, request)
+
+
+
+
+def response_record(params=()) -> bytes:
     """
     return
     :param params: list of params
-    :return: bytes string
+    :return: utf8 bytes string
     """
     if params:
-        return bytes("{record} " + ' '.join(params) + "\n\r")
+        return bytes("{record} " + ' '.join(params) + "\n\r", CODEC)
 
-    return bytes("{record}\n\r")
+    return bytes("{record}\n\r", CODEC)
 
 
 def response_message(text: str) -> bytes:
     """
     return wrapped with the header
     :param text: str
-    :return: bytes string
+    :return: utf8 bytes string
     """
-    return bytes("{message}\n\r" + text)
+    return bytes("{message}\n\r" + text, CODEC)
+

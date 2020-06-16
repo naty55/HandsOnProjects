@@ -2,16 +2,37 @@ import sqlite3
 from sqlite3 import Error
 import hashlib
 from datetime import datetime
+from threading import Lock
+
+
+class Queue:
+    def __init__(self):
+        self.MESSAGES = []
+
+    def append(self, action):
+        self.locker.acquire()
+        self.MESSAGES.append(action)
+        self.locker.release()
+
+    def get(self):
+        messages = self.MESSAGES[:]
+        self.locker.acquire()
+        self.MESSAGES = []
+        self.locker.release()
+        return messages
+
+
+q = Queue()
 
 
 class DataBase:
     """ handle connection to database and manage it """
     def __init__(self, path):
         self.path = path
-        self.connection = self.connect()
-
         self.rows = ['id', 'name', 'email', 'password', 'hash']
+        self.locker = Lock()
 
+        self.connection = self.connect()
         self.initialize()
 
     def connect(self):
@@ -21,7 +42,7 @@ class DataBase:
         """
         db = None
         try:
-            db = sqlite3.connect(self.path)
+            db = sqlite3.connect(self.path, check_same_thread=False)
             print("[OK] connection to DB successful")
         except Error as e:
             print("[Exception]", e)
@@ -38,11 +59,14 @@ class DataBase:
         """
         cursor = self.connection.cursor()
         try:
+            self.locker.acquire()
             if params:
                 cursor.execute(query, params)
             else:
                 cursor.execute(query)
             self.connection.commit()
+            self.locker.release()
+
             if success_msg:
                 print(success_msg)
             return 0  # return 0 if success
@@ -78,15 +102,15 @@ class DataBase:
         self.execute_query(query_create_messages, "[OK] initialization of database successful")
         self.execute_query(query_create_users, "[OK] initialization of database successful")
 
-        for user in self.get_users():
-            print(user)
-
     def read_query(self, query):
+
         cursor = self.connection.cursor()
         try:
+            self.locker.acquire()
             cursor.execute(query)
             result = cursor.fetchall()
-            #print("[OK] read query successful")
+            # print("[OK] read query successful")
+            self.locker.release()
             return result
 
         except Error as e:
@@ -100,14 +124,15 @@ class DataBase:
         VALUES
          (?, ?, ?, ?);
         """
+        print("TRYING TO RECORD", name, mail, password)
         user_hash = hashlib.md5(bytes(name + mail + password, 'utf8')).hexdigest()
         if self.is_user(name) or self.is_user(mail, key='email'):
             usr = self.get_user(name)
-            if usr['hash'] == user_hash:
+            if usr['hash'] == user_hash:  # this user had recorded already
                 print(name, 'Just logged in')
                 return 0
             else:
-                return -1
+                return -2 if self.is_user(name) else -3  # return -2 if name is the problem else -3 (problem with email)
         else:
             return self.execute_query(query, "[OK] user successfully recorded", (name, mail, password, user_hash))
 
@@ -153,7 +178,9 @@ class DataBase:
         :return: dict with all info for the matched user
         """
 
-        usr = self.read_query(f"SELECT * FROM users WHERE {key}='{value}'")[0]
+        usr = self.read_query(f"SELECT * FROM users WHERE {key}='{value}'")
+        if usr:
+            usr = usr[0]
 
         return {self.rows[i]: usr[i] for i in range(len(self.rows))}
 
@@ -205,15 +232,7 @@ class DataBase:
 
 
 if __name__ == '__main__':
-    d = DataBase("test.db")
-
-    d.record_user('Bob', 'bob@gmail.com', '12345678')
-
-
-    print("++++++ USERS ++++++")
-    for user in d.get_users(key='*'):
-        print(user)
-
+    d = DataBase('test.db')
     for message in d.get_messages():
-        print(f"{message['name']} said: {message['text']} on {message['time']}")
+        print(f"{message['name']} said: {message['text']} at {message['time']}")
 

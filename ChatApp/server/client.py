@@ -1,7 +1,7 @@
 from socket import socket, AF_INET, SOCK_STREAM
 from threading import Thread, Lock
 from time import sleep
-
+CODEC = 'utf8'
 
 class Client:
     """
@@ -34,12 +34,7 @@ class Client:
         self.receive_thread = Thread(target=self.receive)
         self.receive_thread.start()
 
-        self.send(self.name)
-        sleep(0.1)
-        self.send(self.email)
-        sleep(0.1)
-        self.send(self.password)
-
+        self.send_record()
 
     def receive(self):
         """
@@ -54,26 +49,33 @@ class Client:
                 self._lock.acquire()
                 self.messages.append(msg)
                 self._lock.release()
-                # print(msg)
                 if msg == "{quit}":
                     self.client_socket.close()
                     break
+                # if msg
 
             except Exception as e:
                 print("Exception:", e)
                 break
 
-    def send(self, msg):
+    def send_record(self):
         """
         send messages to server
         :param msg: str
         :return: None
         """
+        record = "{record}"
         if self.receive_thread.is_alive():
-            self.client_socket.send(bytes(msg, "utf8"))
+            a = bytes(f"{record} {self.name} {self.email} {self.password}\n\r", "utf8")
+            self.client_socket.send(a)
             return
 
         print("The connection is closed")
+
+    def send(self, msg):
+        if self.receive_thread.is_alive():
+            a = bytes("{talk}\r\n" + msg, 'utf8')
+            self.client_socket.send(a)
 
     def get_messages(self):
         """
@@ -81,7 +83,6 @@ class Client:
         :return: list[str]
         """
         msgs_copy = self.messages[:]
-        print(self.name)
 
         # Make sure memory safe to access
         self._lock.acquire()
@@ -95,7 +96,7 @@ class Client:
         :return : None
         """
         if self.receive_thread.is_alive():
-            self.send("{quit}")
+            self.client_socket.send(bytes("{quit}\n\r", CODEC))
         else:
             print("The connection already closed!")
 
