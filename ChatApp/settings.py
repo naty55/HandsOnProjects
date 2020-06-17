@@ -1,0 +1,12 @@
+# GENERAL SETTINGS
+CODEC = 'utf8'
+BUFSIZ = 1024
+
+# Database settings
+DATABASE_PATH = 'test.db'
+
+# CHAT SEVER SETTINGS
+HOST = 'localhost'
+PORT = 5500
+ADDR = (HOST, PORT)
+MAX_CONNECTIONS = 10

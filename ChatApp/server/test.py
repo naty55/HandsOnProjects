@@ -19,6 +19,9 @@ def update_msg(client):
             print("+++Message+++\n" + msg)
             if msg == "{quit}":
                 run = False
+        if client.is_closed():
+            run = False
+            print(client.name, "S")
 
 
 c1 = Client("c3", 'emailc1@gmail.com', '12345678')
@@ -31,13 +34,13 @@ b = Thread(target=update_msg, args=(c2,))
 b.start()
 
 sleep(2)
-c1.send("Hello")
+c1.talk("Hello")
 sleep(2)
-c2.send("what's up")
+c2.talk("what's up")
 sleep(1)
-c1.send("Nothing much")
+c1.talk("Nothing much")
 sleep(1)
-c2.send("Boring...")
+c2.talk("Boring...")
 sleep(2)
 c1.disconnect()
 sleep(2)

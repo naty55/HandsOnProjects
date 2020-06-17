@@ -18,3 +18,7 @@ class Person:
 
     def __repr__(self):
         return f"Person{self.addr}, {self.name}"
+
+    def is_alive(self):
+        return not self.client._closed
+

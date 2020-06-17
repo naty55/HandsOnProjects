@@ -1,7 +1,10 @@
 from socket import socket, AF_INET, SOCK_STREAM
 from threading import Thread, Lock
 from time import sleep
+from ChatApp.protocol_requests import MPFCSResponse
+from traceback import format_exc
 CODEC = 'utf8'
+
 
 class Client:
     """
@@ -34,48 +37,61 @@ class Client:
         self.receive_thread = Thread(target=self.receive)
         self.receive_thread.start()
 
-        self.send_record()
+        self.record()
+        sleep(0.1)
+        self.info()
 
     def receive(self):
         """
         receive messages from server
         :return: None
         """
-        while True:
+        while self.is_alive():
             try:
-                msg = self.client_socket.recv(self.BUFSIZ).decode(self.CODEC)
+                msg = MPFCSResponse(self.client_socket.recv(self.BUFSIZ))
+                _type = msg.type
 
-                # Make sure memory safe to access
-                self._lock.acquire()
-                self.messages.append(msg)
-                self._lock.release()
-                if msg == "{quit}":
+                if _type == "{quit}":
                     self.client_socket.close()
-                    break
-                # if msg
+
+                elif _type == "{message}":
+                    self._lock.acquire()
+                    self.messages.append(msg.text)
+                    self._lock.release()
+
+                elif _type == '{record}':
+                    print("There was a problem", msg.get_params())
+                    self.client_socket.close()
 
             except Exception as e:
                 print("Exception:", e)
+                print(format_exc())
                 break
 
-    def send_record(self):
+    def record(self):
         """
         send messages to server
         :param msg: str
         :return: None
         """
         record = "{record}"
-        if self.receive_thread.is_alive():
-            a = bytes(f"{record} {self.name} {self.email} {self.password}\n\r", "utf8")
-            self.client_socket.send(a)
-            return
 
-        print("The connection is closed")
+        msg = f"{record} {self.name} {self.email} {self.password}\n\r"
+        self.send(msg)
+
+    def info(self):
+        self.send("{info}\n\r")
+
+    def talk(self, msg):
+        msg = "{talk}\n\r" + msg
+        self.send(msg)
 
     def send(self, msg):
-        if self.receive_thread.is_alive():
-            a = bytes("{talk}\r\n" + msg, 'utf8')
-            self.client_socket.send(a)
+        if not self.is_closed():
+            msg = bytes(msg, CODEC)
+            self.client_socket.send(msg)
+        else:
+            print(self.name, "Connection closed")
 
     def get_messages(self):
         """
@@ -95,10 +111,11 @@ class Client:
         Disconnect server by sending {quit} message
         :return : None
         """
-        if self.receive_thread.is_alive():
-            self.client_socket.send(bytes("{quit}\n\r", CODEC))
-        else:
-            print("The connection already closed!")
+        msg = "{quit}\n\r"
+        self.send(msg)
 
     def is_closed(self):
         return self.client_socket._closed
+
+    def is_alive(self):
+        return not self.client_socket._closed

@@ -11,6 +11,7 @@ class MPFCS:
     def __init__(self, request):
         self.brequset = request  # Bytes string of request
         self.request = request.decode(CODEC)
+        # print("GOT MESSAGE", request, "END")
         self.header = self.get_header()
         self.type = self.get_type()
         self.text = self.get_body()
@@ -19,7 +20,7 @@ class MPFCS:
         return self.request.split('\n\r', 2)[0]
 
     def get_body(self):
-        return self.request.split('\r\n', 2)[1] if self.type == '{talk}' else ''
+        return self.request.split('\n\r', 2)[1] if self.type == '{talk}' else ''
 
     def get_params(self):
         """
@@ -41,19 +42,20 @@ class MPFCS:
 
 
 class MPFCSRequest(MPFCS):
-    TYPES = ['{record}', '{delete}', '{talk}', '{quit}']
+    TYPES = ['{record}', '{delete}', '{talk}', '{quit}', '{info}']
 
     def __init__(self, request):
         super().__init__(request)
 
 
 class MPFCSResponse(MPFCS):
-    TYPES = ['{record}', '{message}', '{success}', '{update}']
+    TYPES = ['{record}', '{message}', '{update}', '{quit}', '{info}']
 
     def __init__(self, request):
-        super().__init__(self, request)
+        super().__init__(request)
 
-
+    def get_body(self):
+        return self.request.split('\n\r', 2)[1] if self.type == '{message}' else ''
 
 
 def response_record(params=()) -> bytes:
@@ -75,4 +77,15 @@ def response_message(text: str) -> bytes:
     :return: utf8 bytes string
     """
     return bytes("{message}\n\r" + text, CODEC)
+
+
+def response_info(info_dict) -> bytes:
+    """
+    return wrapped dict with header
+    :param json: str
+    :return: uts8 bytes string
+    """
+    header = '{info}\n\r'
+    body = str(info_dict)
+    return bytes(header + body, CODEC)
 

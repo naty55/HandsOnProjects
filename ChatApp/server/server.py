@@ -6,8 +6,9 @@ import traceback
 
 from person import Person
 from DataBase import DataBase
-from protocol_requests import MPFCSRequest as req
-from protocol_requests import response_message, response_record
+from ChatApp.protocol_requests import MPFCSRequest as req
+from ChatApp.protocol_requests import response_message, response_record, response_info
+from ChatApp.settings import CODEC, DATABASE_PATH, BUFSIZ, ADDR, MAX_CONNECTIONS
 
 
 ###################################################
@@ -42,6 +43,7 @@ from protocol_requests import response_message, response_record
 #                  if the client has a permission for deleting that message, the message
 #                  will be deleted and every client will get message telling him to delete
 #                  that message.
+#    --> {info}   :tells the server to send information about the chat e.g. how many are online etc..
 #
 #    For example let's say there is new user wants to join the chat room here
 #    is what he should do:
@@ -67,45 +69,42 @@ from protocol_requests import response_message, response_record
 #
 #    --> {message}: send the client new message that has arrived, the text message is in the body.
 #
-#    --> {success}: tells the client his request has succeeded. usually after delete request the server won't send
-#                   success response to every talk request (at least for now).
-#
 #    --> {update}:  tells the clients to update their messages entry. for example if user has deleted
 #                   message then update message will be sent to all clients.
+#    --> {info}   : inform all clients how many people are on the chat and their names. the header is
+#                   JSON object, info message can be sent from server even without client's request.
 #
 #   That's it for now....
 
-
-# Global Constants
-HOST = 'localhost'
-PORT = 5500
-BUFSIZ = 1024
-MAX_CONNECTIONS = 10
-ADDR = (HOST, PORT)
-CODEC = 'utf8'
-DB = DataBase('test.db')
 
 # Global Variables
 persons = []
 Names = []
 number_of_conn = 0
 
-
 SERVER = socket(AF_INET, SOCK_STREAM)  # start server
 SERVER.bind(ADDR)
+DB = DataBase(DATABASE_PATH)
 
 
-def broadcast(msg, method='{talk}', name=""):
+def broadcast(msg, method='{message}', name=""):
     """
     Neat the name and then
     Send the new message to all clients
     :param msg: str
+    :param method: str
     :param name: str
     :return: None
     """
-    if name:
-        name += " : "
-    message = response_message(name + msg)
+    message = bytes()
+    if method == "{message}":
+        if name:
+            name += " : "
+        message = response_message(name + msg)
+
+    else:       # for now the server support only message broadcasting
+        return  # later i'll add also info and update broadcasting
+
     for person in persons:
         try:
             person.client.send(message)
@@ -127,9 +126,11 @@ def wait_for_connections():
             number_of_conn += 1
             person = Person(addr, client)
             persons.append(person)
+
             print(f"[CONNECTED] {addr} connected to the server at {datetime.now()}")
             print(number_of_conn, "people are connected now")
-            client.send(bytes("Greeting from cave! ", CODEC))
+
+            client.send(response_message("Greeting from cave! "))
             Thread(target=handle_client, args=(person,)).start()
         except Exception as e:
             print("[Failure]", e)
@@ -156,26 +157,28 @@ def handle_client(person):
     client.send(response_message(name + " welcome to our chat"))  # Greet person that he is in the chat
     broadcast(f"{name} has joined the chat!")  # Inform all clients about the new member
 
-    while True:  # wait for any message from person
+    while person.is_alive():  # wait for any message from person while connected
+
         try:
             request = req(client.recv(BUFSIZ))  # Get message from client
             _type = request.type
 
             if _type == "{quit}":  # if message is {quit} disconnect person
                 handle_socket_closing(person)
-                break
 
-            elif _type == '{talk}':  # if message is {talk} send to all other clients
+            elif _type == '{talk}':  # if message is {talk} send message response to all other clients
                 print(f"{name}: {request.text}")
-                broadcast(request.text, name)
+                broadcast(request.text, name=name)
                 DB.record_message(request.text, name)
 
             elif _type == '{delete}':  # if message is {delete} delete message from db
                 pass  # delete from message db and broadcast to all users update message
 
+            elif _type == '{info}':
+                client.send(response_info(get_info()))
+
         except Exception as e:
             handle_socket_closing(person, e)
-            break
 
 
 def handle_socket_closing(person, e=None):
@@ -231,13 +234,13 @@ def get_user(person):
     """
 
     global number_of_conn
-    status_dict = {-3: "name",  # name has taken
-                   -2: "email",  # email in use
+    status_dict = {-3: "email",  # name has taken
+                   -2: "name",  # email in use
                    -1: "undetected",
-                   0: ""
+                   0: ""  # success
                    }
 
-    while True:
+    while not person.name:  # run as long as the person didn't recorded
         status = -1
         try:
             record_request = req(person.client.recv(BUFSIZ))
@@ -247,7 +250,7 @@ def get_user(person):
                 status = DB.record_user(name, email, password)
 
         except Exception as e:
-            print(traceback.format_exc())
+            # print(traceback.format_exc())
             handle_socket_closing(person, e)
             return -1
 
@@ -256,7 +259,6 @@ def get_user(person):
             if status == 0:  # record succeeded
                 Names.append(name)
                 person.set_name(name)
-                break  # we got the user recorded now he is ready to talk
 
             elif status < -1:  # There was not record request or there was a problem with recording the user
                 person.client.send(response_record((status_dict[status],)))

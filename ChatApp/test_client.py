@@ -16,6 +16,7 @@ messages = []
 client_socket = socket(AF_INET, SOCK_STREAM)
 client_socket.connect(ADDR)
 
+
 def receive():
     """
     receive messages from server

@@ -126,13 +126,14 @@ class DataBase:
         """
         print("TRYING TO RECORD", name, mail, password)
         user_hash = hashlib.md5(bytes(name + mail + password, 'utf8')).hexdigest()
-        if self.is_user(name) or self.is_user(mail, key='email'):
+        if self.is_user(name):
             usr = self.get_user(name)
             if usr['hash'] == user_hash:  # this user had recorded already
                 print(name, 'Just logged in')
                 return 0
-            else:
-                return -2 if self.is_user(name) else -3  # return -2 if name is the problem else -3 (problem with email)
+            return -2
+        elif self.is_user(mail, key='email'):
+            return -3  # This mail is in use already
         else:
             return self.execute_query(query, "[OK] user successfully recorded", (name, mail, password, user_hash))
 
