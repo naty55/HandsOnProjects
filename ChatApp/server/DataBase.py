@@ -124,12 +124,12 @@ class DataBase:
         VALUES
          (?, ?, ?, ?);
         """
-        print("TRYING TO RECORD", name, mail, password)
-        user_hash = hashlib.md5(bytes(name + mail + password, 'utf8')).hexdigest()
+        print("[OK] TRYING TO RECORD", name, mail, password)
+        user_hash = hashlib.sha1(bytes(name + mail + password, 'utf8')).hexdigest()
         if self.is_user(name):
             usr = self.get_user(name)
             if usr['hash'] == user_hash:  # this user had recorded already
-                print(name, 'Just logged in')
+                print('[OK]', name, 'Just logged in')
                 return 0
             return -2
         elif self.is_user(mail, key='email'):
@@ -234,6 +234,10 @@ class DataBase:
 
 if __name__ == '__main__':
     d = DataBase('test.db')
+    print("+++ messages +++")
     for message in d.get_messages():
         print(f"{message['name']} said: {message['text']} at {message['time']}")
+    print("+++ users +++")
+    for user in d.get_users(key='*'):
+        print(user)
 

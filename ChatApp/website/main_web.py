@@ -11,7 +11,7 @@ app.secret_key = urandom(16)
 clients = {}
 
 
-def handle_clients(name):
+def handle_clients(name, email, password):
     """
     handle client to prevent redundant connections
     and check if there is change in the name if so close previous client
@@ -23,7 +23,7 @@ def handle_clients(name):
     exists = clients.get(name, False)
 
     if not exists:
-        new_client = Client(name)
+        new_client = Client(name, email, password)
         clients[name] = new_client
 
 
@@ -64,11 +64,17 @@ def login():
     if method == "POST":  # if form is sent handle it
         try:  # try to get name from the form
             name = request.form["inputName"]
+
+            email = request.form["inputEmail"]
+            password = request.form['inputPass']
+
         except Exception as e:
+            print("[EXCEPTION]", e)
             return redirect(url_for('login'))
+
         else:  # if successfully open session with the name
             session[NAME_KEY] = name
-            handle_clients(name)
+            handle_clients(name, email, password)
             return redirect(url_for("chatroom", usr=name))  # and redirect to chatroom
 
     return render_template("login.html")  # if exception occurred return login page
@@ -120,7 +126,7 @@ def send():
 
     client = clients.get(name, None)
     if client:
-        client.send(message)
+        client.talk(message)
     return "none"
 
 

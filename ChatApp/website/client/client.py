@@ -3,20 +3,13 @@ from threading import Thread, Lock
 from time import sleep
 from ChatApp.protocol_requests import MPFCSResponse
 from traceback import format_exc
-from ChatApp.settings import CODEC
+from ChatApp.settings import CODEC, BUFSIZ, HOST, PORT, ADDR
 
 
 class Client:
     """
     class object for communication
     """
-    # Global Constants
-    HOST = "localhost"
-    PORT = 5500
-    BUFSIZ = 1024
-    MAX_CONNECTIONS = 10
-    ADDR = (HOST, PORT)
-    CODEC = 'utf8'
 
     def __init__(self, name, email, password):
         """
@@ -28,7 +21,7 @@ class Client:
         self.password = password
 
         self.client_socket = socket(AF_INET, SOCK_STREAM)
-        self.client_socket.connect(self.ADDR)
+        self.client_socket.connect(ADDR)
 
         self.messages = []
 
@@ -48,7 +41,7 @@ class Client:
         """
         while self.is_alive():
             try:
-                msg = MPFCSResponse(self.client_socket.recv(self.BUFSIZ))
+                msg = MPFCSResponse(self.client_socket.recv(BUFSIZ))
                 _type = msg.type
 
                 if _type == "{quit}":

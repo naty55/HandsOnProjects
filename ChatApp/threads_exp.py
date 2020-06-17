@@ -3,7 +3,7 @@ import threading
 from time import sleep
 import logging
 import concurrent.futures
-
+from threading import Thread, Lock
 
 class FakeDB:
     def __init__(self):
@@ -84,14 +84,27 @@ class Pipeline:
         self.consumer_lock.release()
         #logging.debug("%s:getlock released", name)
 
+def append(val, o):
+    sleep(random.random() * 10)
+    o.append(val)
+
+
 
 if __name__ == '__main__':
     format = "%(asctime)s: %(message)s"
     logging.basicConfig(format=format, level=logging.INFO,
                         datefmt="%H:%M:%S")
     logging.getLogger().setLevel(logging.DEBUG)
+    a = []
+    for i in range(10):
+        Thread(target=append, args=(i, a)).start()
+    sleep(5 * 10)
+    print(a)
 
+
+"""
     pipeline = Pipeline()
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         executor.submit(producer, pipeline)
         executor.submit(consumer, pipeline)
+"""

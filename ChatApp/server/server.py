@@ -6,6 +6,7 @@ import traceback
 
 from person import Person
 from DataBase import DataBase
+
 from ChatApp.protocol_requests import MPFCSRequest as req
 from ChatApp.protocol_requests import response_message, response_record, response_info
 from ChatApp.settings import CODEC, DATABASE_PATH, BUFSIZ, ADDR, MAX_CONNECTIONS
@@ -19,11 +20,12 @@ from ChatApp.settings import CODEC, DATABASE_PATH, BUFSIZ, ADDR, MAX_CONNECTIONS
 #    the first line is the header line and it followed with '\n\r' to indicate the end of the header.
 #    From there down is the body. the body supposed to contain
 #    the message that is going to be displayed on the chat page.
+#    The protocol takes place over Transmission protocol (like TCP, UDP)
 #
 #    #### Request ####
 #
 #    There are some keywords or methods for the header and every one of them
-#    needs to be wrapped in curly brackets:
+#    has to be wrapped in curly brackets:
 #
 #    --> {quit}:   tells the server to close the connection with client.
 #
@@ -80,7 +82,6 @@ from ChatApp.settings import CODEC, DATABASE_PATH, BUFSIZ, ADDR, MAX_CONNECTIONS
 # Global Variables
 persons = []
 Names = []
-number_of_conn = 0
 
 SERVER = socket(AF_INET, SOCK_STREAM)  # start server
 SERVER.bind(ADDR)
@@ -119,16 +120,14 @@ def wait_for_connections():
     wait for connection from new clients once connected start new thread
     :return: None
     """
-    global number_of_conn
     while True:
         try:
             client, addr = SERVER.accept()
-            number_of_conn += 1
             person = Person(addr, client)
             persons.append(person)
 
             print(f"[CONNECTED] {addr} connected to the server at {datetime.now()}")
-            print(number_of_conn, "people are connected now")
+            show_info()
 
             client.send(response_message("Greeting from cave! "))
             Thread(target=handle_client, args=(person,)).start()
@@ -148,7 +147,7 @@ def handle_client(person):
     client = person.client
 
     # Before the user starts chatting he has to be recorded
-    if get_user(person) == -1:
+    if get_user(person) == -1: # There was problem with that person
         return
 
     name = person.name
@@ -183,14 +182,12 @@ def handle_client(person):
 
 def handle_socket_closing(person, e=None):
     """
-    handles expected and unexpected happened by error client socket closing
+    handles expected and unexpected (usually happened by error) client socket closing
     removes persons from list and print logs to the screen
     :param person: person
     :param e: error message
     :return: None
     """
-
-    global number_of_conn
 
     if person.name:
         Names.remove(person.name)
@@ -206,8 +203,7 @@ def handle_socket_closing(person, e=None):
     print(f"[DISCONNECTED] {person.addr} disconnected from the server at {datetime.now()}")
     persons.remove(person)
 
-    number_of_conn -= 1
-    print("[OK]", number_of_conn, "people are connected")
+    show_info()
 
     if not e:
         # Inform everybody that that person has left
@@ -219,10 +215,13 @@ def get_info():
     get information about the status of people on the chat
     :return: info type:dict
     """
-    info = {'count': number_of_conn,
+    info = {'count': len(persons),
             'names': Names,
             }
     return info
+
+def show_info():
+    print("[INFO]", len(persons), "people are connected")
 
 
 def get_user(person):
@@ -233,10 +232,9 @@ def get_user(person):
     :return: int if failed(-1)
     """
 
-    global number_of_conn
     status_dict = {-3: "email",  # name has taken
                    -2: "name",  # email in use
-                   -1: "undetected",
+                   -1: "undetected",  # undetected error
                    0: ""  # success
                    }
 
