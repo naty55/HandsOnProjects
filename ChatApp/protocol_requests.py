@@ -28,6 +28,7 @@ class MPFCS:
         :return: list of params
         """
         params = self.header.split()
+        print("params of this header", self.header, "are", params)
         if len(params) > 1:
             return params[1:]
         return []
@@ -42,30 +43,30 @@ class MPFCS:
 
 
 class MPFCSRequest(MPFCS):
-    TYPES = ['{record}', '{delete}', '{talk}', '{quit}', '{info}']
+    TYPES = ['{record}', '{delete}', '{talk}', '{quit}', '{info}', '{check}']
 
     def __init__(self, request):
         super().__init__(request)
 
 
 class MPFCSResponse(MPFCS):
-    TYPES = ['{record}', '{message}', '{update}', '{quit}', '{info}']
+    TYPES = ['{record}', '{message}', '{update}', '{quit}', '{info}', '{check}']
 
     def __init__(self, request):
         super().__init__(request)
 
     def get_body(self):
-        return self.request.split('\n\r', 2)[1] if self.type == '{message}' else ''
+        return self.request.split('\n\r', 2)[1] if self.type == '{message}' or self.type == '{info}' else ''
 
 
-def response_record(params=()) -> bytes:
+def response_record(param='') -> bytes:
     """
     return
-    :param params: list of params
+    :param param: str
     :return: utf8 bytes string
     """
-    if params:
-        return bytes("{record} " + ' '.join(params) + "\n\r", CODEC)
+    if param:
+        return bytes("{record} " + param + " \n\r", CODEC)
 
     return bytes("{record}\n\r", CODEC)
 
@@ -82,10 +83,20 @@ def response_message(text: str) -> bytes:
 def response_info(info_dict) -> bytes:
     """
     return wrapped dict with header
-    :param json: str
+    :param info_dict: dict
     :return: uts8 bytes string
     """
     header = '{info}\n\r'
     body = str(info_dict)
     return bytes(header + body, CODEC)
+
+
+def response_check(is_user):
+    """
+
+    :param is_user: int
+    :return:
+    """
+    msg = f"{{check}} {str(is_user)}\n\r"
+    return bytes(msg, CODEC)
 

@@ -1,4 +1,4 @@
-console.log("login page ajax acting");
+console.log("Register page ajax acting")
 
 $(document).ready(function() {
 
@@ -9,10 +9,17 @@ $(document).ready(function() {
             type: 'post',
             data: $('form').serialize(),
             success: function(data) {
+                if (data.status)
+                {
                  // here i should add some code to handle the error
-                 if (data.status == -1 ){
-                     alert('username/password are not correct')
+                 if (data.status == -3 ){
+                     console.log("this mail is already in use")
                  }
+                 else if (data.status == -2){
+                     console.log("this name is already in use")
+                 }
+
+                }
                 else
                 {
                     $('form').submit();

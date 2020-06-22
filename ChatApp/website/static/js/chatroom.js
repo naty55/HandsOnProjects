@@ -36,7 +36,12 @@ function update(){
 
   function log(myJson){
   // take all new messages and show them on the screen
-  let new_messages =  myJson["list"]
+  let new_messages =  myJson["messages"]
+  let info = myJson['info']
+
+  // update
+  $("#people").text(info["count"])
+
   msgs = msgs.concat(new_messages)
 
   if (new_messages == "Not connected"){
@@ -49,6 +54,7 @@ function update(){
           flag = true
           }
       $("#messages").append("<p>" + new_messages[i] + "</p>")
+
       }
   }
 }

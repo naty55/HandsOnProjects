@@ -231,9 +231,17 @@ class DataBase:
             return True
         return False
 
+    def check_for(self, name, password):
+        if self.read_query(f"SELECT id from users WHERE name='{name}' and password='{password}'"):
+            return 0
+        return -1
+
+
 
 if __name__ == '__main__':
     d = DataBase('test.db')
+
+    print(d.check_for('c3', '1234567'))
     print("+++ messages +++")
     for message in d.get_messages():
         print(f"{message['name']} said: {message['text']} at {message['time']}")

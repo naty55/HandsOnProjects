@@ -8,7 +8,7 @@ from person import Person
 from DataBase import DataBase
 
 from ChatApp.protocol_requests import MPFCSRequest as req
-from ChatApp.protocol_requests import response_message, response_record, response_info
+from ChatApp.protocol_requests import response_message, response_record, response_info, response_check
 from ChatApp.settings import CODEC, DATABASE_PATH, BUFSIZ, ADDR, MAX_CONNECTIONS
 
 
@@ -47,6 +47,10 @@ from ChatApp.settings import CODEC, DATABASE_PATH, BUFSIZ, ADDR, MAX_CONNECTIONS
 #                  that message.
 #    --> {info}   :tells the server to send information about the chat e.g. how many are online etc..
 #
+#    --> {check}  :tells the server to check for specific user by name and password, must contain in
+#                 the params name and password, the server returns check response with params
+#                 0 or -1 for success and failure respectively
+#
 #    For example let's say there is new user wants to join the chat room here
 #    is what he should do:
 #    A) send first message '''{record} user_name user's_email, password\n\r'''
@@ -66,15 +70,20 @@ from ChatApp.settings import CODEC, DATABASE_PATH, BUFSIZ, ADDR, MAX_CONNECTIONS
 #    --> {record}: tells the client that he should send record request in order to start
 #                  chatting. it may happened if the client didn't send record request or sent it with name or email
 #                  that is already in use for another client (even if that client is not connected at that time).
-#                  The header may contain the problematic part of the request if exists, like email is already in use
-#                  etc.
+#                  The header may contain the problematic part of the request if exists, e.g. if email is already in
+#                  use the param will be -3
+#                  0 = ok, -1 = undetected, -2 = name is in use, -3 mail is in use
 #
 #    --> {message}: send the client new message that has arrived, the text message is in the body.
 #
 #    --> {update}:  tells the clients to update their messages entry. for example if user has deleted
 #                   message then update message will be sent to all clients.
-#    --> {info}   : inform all clients how many people are on the chat and their names. the header is
+#
+#    --> {info}  :  inform all clients how many people are on the chat and their names. the header is
 #                   JSON object, info message can be sent from server even without client's request.
+#
+#    --> {check}  : after the server received a check request it sends check response with parameter 0
+#                   or -1
 #
 #   That's it for now....
 
@@ -88,7 +97,7 @@ SERVER.bind(ADDR)
 DB = DataBase(DATABASE_PATH)
 
 
-def broadcast(msg, method='{message}', name=""):
+def broadcast(msg='', method='{message}', name=""):
     """
     Neat the name and then
     Send the new message to all clients
@@ -103,8 +112,8 @@ def broadcast(msg, method='{message}', name=""):
             name += " : "
         message = response_message(name + msg)
 
-    else:       # for now the server support only message broadcasting
-        return  # later i'll add also info and update broadcasting
+    elif method == '{info}':
+        message = response_info(get_info())
 
     for person in persons:
         try:
@@ -128,6 +137,7 @@ def wait_for_connections():
 
             print(f"[CONNECTED] {addr} connected to the server at {datetime.now()}")
             show_info()
+            broadcast(method='{info}')
 
             client.send(response_message("Greeting from cave! "))
             Thread(target=handle_client, args=(person,)).start()
@@ -147,7 +157,7 @@ def handle_client(person):
     client = person.client
 
     # Before the user starts chatting he has to be recorded
-    if get_user(person) == -1: # There was problem with that person
+    if get_user(person) == -1:  # There was problem with that person
         return
 
     name = person.name
@@ -157,6 +167,7 @@ def handle_client(person):
     broadcast(f"{name} has joined the chat!")  # Inform all clients about the new member
 
     while person.is_alive():  # wait for any message from person while connected
+        time.sleep(0.1)
 
         try:
             request = req(client.recv(BUFSIZ))  # Get message from client
@@ -215,10 +226,11 @@ def get_info():
     get information about the status of people on the chat
     :return: info type:dict
     """
-    info = {'count': len(persons),
-            'names': Names,
+    info = {"count": len(persons),
+            "names": Names,
             }
     return info
+
 
 def show_info():
     print("[INFO]", len(persons), "people are connected")
@@ -232,20 +244,27 @@ def get_user(person):
     :return: int if failed(-1)
     """
 
-    status_dict = {-3: "email",  # name has taken
-                   -2: "name",  # email in use
-                   -1: "undetected",  # undetected error
-                   0: ""  # success
-                   }
-
     while not person.name:  # run as long as the person didn't recorded
         status = -1
         try:
-            record_request = req(person.client.recv(BUFSIZ))
+            request = req(person.client.recv(BUFSIZ))
 
-            if record_request.type == '{record}':
-                name, email, password = record_request.get_params()
+            if request.type == '{record}':
+                name, email, password = request.get_params()
                 status = DB.record_user(name, email, password)
+
+            elif request.type == '{check}':
+                name, password = request.get_params()
+                print(name, 'is trying to log in', password)
+                status = DB.check_for(name, password)
+                print("and it's status is", status)
+                if status == 0:
+                    Names.append(name)
+                    person.set_name(name)
+                else:
+                    person.client.send(response_check(status))
+                    handle_socket_closing(person)
+                    return -1
 
         except Exception as e:
             # print(traceback.format_exc())
@@ -258,10 +277,8 @@ def get_user(person):
                 Names.append(name)
                 person.set_name(name)
 
-            elif status < -1:  # There was not record request or there was a problem with recording the user
-                person.client.send(response_record((status_dict[status],)))
-            else:
-                person.client.send(response_record(()))
+            else:  # There was not record request or there was a problem with recording the user
+                person.client.send(response_record(str(status)))
 
 
 if __name__ == '__main__':

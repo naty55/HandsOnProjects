@@ -1,6 +1,7 @@
 from flask import Flask, render_template, url_for, redirect, session, request, jsonify
 from os import urandom
 from client import Client
+from time import sleep
 
 
 NAME_KEY = 'name'
@@ -11,34 +12,37 @@ app.secret_key = urandom(16)
 clients = {}
 
 
-def handle_clients(name, email, password):
+def create_client(name, email, password):
     """
     handle client to prevent redundant connections
     and check if there is change in the name if so close previous client
-    and start new one
+    and start new one, return the status of client just created
     :param name: str
-    :return: None
+    :param email: str
+    :param password: str
+    :return: int
     """
     global clients
     exists = clients.get(name, False)
 
     if not exists:
         new_client = Client(name, email, password)
-        clients[name] = new_client
+        sleep(0.1)
+        print("STATUS WE GOT FOR", new_client.name,  "IS", new_client.status)
+
+        if new_client.status == 0:
+            clients[name] = new_client
+
+        return new_client.status
 
 
-@app.route("/<name>")
 @app.route("/")
-def home(name=None):
+def home():
     """
     Display home page and if there is active session handle it
-    :param name: optional str[name]
     :return: Html rendered Home page with client name if exists
     """
     name = session.get(NAME_KEY, None)
-    print(name)
-    if name:  # There is active session
-        handle_clients(name)   # check for its client or create new one
 
     return render_template("index.html", user=name)
 
@@ -49,12 +53,11 @@ def about():
     Display about page
     :return: HTML rendered page
     """
-    print(session.get(NAME_KEY, None))
     return render_template("about.html")
 
 
-@app.route("/login", methods=["GET", "POST"])
-def login():
+@app.route("/register", methods=["GET", "POST"])
+def register():
     method = request.method
     name = session.get(NAME_KEY, None)
 
@@ -62,22 +65,52 @@ def login():
         return redirect(url_for('chatroom', usr=name))
 
     if method == "POST":  # if form is sent handle it
+
         try:  # try to get name from the form
             name = request.form["inputName"]
-
             email = request.form["inputEmail"]
             password = request.form['inputPass']
 
+            if not all((name, email, password)):
+                raise Exception("one or more params are missing")
+
         except Exception as e:
             print("[EXCEPTION]", e)
-            return redirect(url_for('login'))
+            return redirect(url_for('register'))
 
         else:  # if successfully open session with the name
-            session[NAME_KEY] = name
-            handle_clients(name, email, password)
-            return redirect(url_for("chatroom", usr=name))  # and redirect to chatroom
+            status = create_client(name, email, password)
 
-    return render_template("login.html")  # if exception occurred return login page
+            if status == 0:  # if successfully recorded redirect to chatroom
+                print(f"[OK] {name} just registered in ")
+                session[NAME_KEY] = name
+                return redirect(url_for("chatroom", usr=name))
+            else:  # else send error code
+                return jsonify(status=status)
+
+    return render_template("register.html")  # if exception occurred return login page
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'GET':
+        return render_template("login.html")
+    else:
+        name = session.get(NAME_KEY, None)
+        if name:  # if there is an active session
+            return redirect(url_for('chatroom', usr=name))
+
+        name = request.form['Name']
+        password = request.form['Password']
+        print(name, "is trying to log in with this password", password)
+        status = create_client(name, email='', password=password)
+        print("and its status is", status)
+        if status == 0:
+            print(name, "just logged in with password", password)
+            session[NAME_KEY] = name
+            return redirect(url_for("chatroom", usr=name))
+        else:
+            return jsonify(status=status)
 
 
 @app.route("/logout", methods=["GET"])
@@ -110,7 +143,7 @@ def chatroom(usr):
     if usr == name:
         return render_template("chatroom.html", user=usr)
     else:
-        return redirect(url_for("login"))
+        return redirect(url_for("register"))
 
 
 @app.route('/send', methods=["POST"])
@@ -135,13 +168,15 @@ def update():
 
     name = session.get(NAME_KEY, None)
     new_messages = "Not connected"
+    info = 'none'
 
     client = clients.get(name, None)
     if client:
         new_messages = client.get_messages()
-    print(name, new_messages)
-    return jsonify(list=new_messages)
+        info = client.get_info()
+
+    return jsonify(messages=new_messages, info=info)
 
 
 if __name__ == '__main__':
-    app.run(host='192.168.43.188')
+    app.run(host='192.168.43.188', debug=True)

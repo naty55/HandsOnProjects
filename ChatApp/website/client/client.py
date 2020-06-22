@@ -1,9 +1,10 @@
 from socket import socket, AF_INET, SOCK_STREAM
 from threading import Thread, Lock
 from time import sleep
+import json
 from ChatApp.protocol_requests import MPFCSResponse
 from traceback import format_exc
-from ChatApp.settings import CODEC, BUFSIZ, HOST, PORT, ADDR
+from ChatApp.settings import CODEC, BUFSIZ, ADDR
 
 
 class Client:
@@ -24,15 +25,20 @@ class Client:
         self.client_socket.connect(ADDR)
 
         self.messages = []
+        self._info = {}
 
         self._lock = Lock()
 
         self.receive_thread = Thread(target=self.receive)
         self.receive_thread.start()
 
-        self.record()
-        sleep(0.1)
-        self.info()
+        # indicate if there were issues with recording
+        self.status = 0
+
+        if self.email:  # try to record user
+            self.record()
+        else:  # else try to log him in
+            self.check()
 
     def receive(self):
         """
@@ -54,7 +60,18 @@ class Client:
 
                 elif _type == '{record}':
                     print("There was a problem", msg.get_params())
+                    self.status = msg.get_params()[0]
                     self.client_socket.close()
+
+                elif _type == "{info}":
+                    # convert to json and store it
+                    to_json = msg.text.replace("'", "\"")
+                    self._info = json.loads(to_json)
+
+                elif _type == '{check}':
+                    print("Status of this client is")
+                    print(msg.get_params()[0])
+                    self.status = msg.get_params()[0]
 
             except Exception as e:
                 print("Exception:", e)
@@ -64,23 +81,23 @@ class Client:
     def record(self):
         """
         send messages to server
-        :param msg: str
         :return: None
         """
         record = "{record}"
-
         msg = f"{record} {self.name} {self.email} {self.password}\n\r"
-        self.send(msg)
 
-    def info(self):
-        self.send("{info}\n\r")
+        self.send(msg)
 
     def talk(self, msg):
         msg = "{talk}\n\r" + msg
         self.send(msg)
 
+    def check(self):
+        check = '{check}'
+        self.send(f"{check} {self.name} {self.password}\n\r")
+
     def send(self, msg):
-        if not self.is_closed():
+        if self.is_alive():
             msg = bytes(msg, CODEC)
             self.client_socket.send(msg)
         else:
@@ -106,6 +123,9 @@ class Client:
         """
         msg = "{quit}\n\r"
         self.send(msg)
+
+    def get_info(self):
+        return self._info
 
     def is_closed(self):
         return self.client_socket._closed

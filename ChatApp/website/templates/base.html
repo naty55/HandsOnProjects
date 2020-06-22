@@ -92,7 +92,8 @@
             <a class="nav-item nav-link" href="{{ url_for('logout')}}">Logout</a>
             {% endif %}
             {% if not user %}
-            <a class="nav-item nav-link" href="{{ url_for('login') }}">Login</a>
+            <a class="nav-item nav-link" href="{{ url_for('login') }}"><small>Member ? </small>Login</a>
+            <a class="nav-item nav-link" href="{{ url_for('register') }}">Register</a>
             {% endif %}
 
             <a class="nav-item nav-link" href="/about">About us</a>
